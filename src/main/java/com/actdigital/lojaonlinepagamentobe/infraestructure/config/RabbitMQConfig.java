@@ -17,14 +17,17 @@ import org.springframework.amqp.rabbit.retry.RejectAndDontRequeueRecoverer;
 @Configuration
 public class RabbitMQConfig {
 
-    public static final String PEDIDO_CRIADO_EXCHANGE      = "pedido.criado.exchange";
-    public static final String PEDIDO_CRIADO_QUEUE         = "pedido.criado.queue";
-    public static final String PEDIDO_CRIADO_ROUTING_KEY   = "pedido.criado";
+    // Exchanges e filas de pedidos
+    public static final String PEDIDO_CRIADO_EXCHANGE    = "pedido.criado.exchange";
+    public static final String PEDIDO_CRIADO_QUEUE       = "pedido.criado.queue";
+    public static final String PEDIDO_CRIADO_ROUTING_KEY = "pedido.criado";
 
+    // Exchanges e filas de confirmação de pagamento
     public static final String PAGAMENTO_CONFIRMADO_EXCHANGE    = "pagamento.confirmado.exchange";
     public static final String PAGAMENTO_CONFIRMADO_QUEUE       = "pagamento.confirmado.queue";
     public static final String PAGAMENTO_CONFIRMADO_ROUTING_KEY = "pagamento.confirmado";
 
+    // Dead-letter exchange/queue
     public static final String DLX_EXCHANGE    = "dlx.exchange";
     public static final String DLX_QUEUE       = "dlx.queue";
     public static final String DLX_ROUTING_KEY = "dlx.routing-key";
@@ -39,11 +42,11 @@ public class RabbitMQConfig {
 
     @Bean
     public RabbitTemplate rabbitTemplate(ConnectionFactory cf,
-                                         Jackson2JsonMessageConverter converter) {
-        RabbitTemplate tpl = new RabbitTemplate(cf);
-        tpl.setMessageConverter(converter);
-        tpl.setChannelTransacted(true);
-        return tpl;
+                                         Jackson2JsonMessageConverter conv) {
+        RabbitTemplate rt = new RabbitTemplate(cf);
+        rt.setMessageConverter(conv);
+        rt.setChannelTransacted(true);
+        return rt;
     }
 
     @Bean
@@ -119,21 +122,19 @@ public class RabbitMQConfig {
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             ConnectionFactory cf,
-            Jackson2JsonMessageConverter converter
+            Jackson2JsonMessageConverter conv
     ) {
-        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
-        factory.setConnectionFactory(cf);
-        factory.setMessageConverter(converter);
-        factory.setConcurrentConsumers(1);
-        factory.setPrefetchCount(1);
-
-        RetryOperationsInterceptor retryInterceptor = RetryInterceptorBuilder
-                .stateless()
-                .maxAttempts(3)
-                .backOffOptions(500, 2.0, 2000)
+        var f = new SimpleRabbitListenerContainerFactory();
+        f.setConnectionFactory(cf);
+        f.setMessageConverter(conv);
+        f.setConcurrentConsumers(3);
+        f.setPrefetchCount(5);
+        RetryOperationsInterceptor retry = RetryInterceptorBuilder.stateless()
+                .maxAttempts(5)
+                .backOffOptions(1000, 2.0, 10000)
                 .recoverer(new RejectAndDontRequeueRecoverer())
                 .build();
-        factory.setAdviceChain(retryInterceptor);
-        return factory;
+        f.setAdviceChain(retry);
+        return f;
     }
 }
