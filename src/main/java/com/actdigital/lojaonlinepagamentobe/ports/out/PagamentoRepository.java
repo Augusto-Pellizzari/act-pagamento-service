@@ -8,5 +8,6 @@ public interface PagamentoRepository {
 
     Pagamento salvar(Pagamento p);
     Optional<Pagamento> findByPedidoId(Long pedidoId);
+    Optional<Pagamento> findByCorrelationId(String correlationId);
     void updateStatus(Long pedidoId, PagamentoStatus status);
 }

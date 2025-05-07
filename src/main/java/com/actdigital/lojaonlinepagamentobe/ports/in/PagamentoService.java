@@ -5,6 +5,6 @@ import com.actdigital.lojaonlinepagamentobe.infraestructure.event.PedidoCriadoEv
 
 public interface PagamentoService {
 
-    void processarPagamento(PedidoCriadoEvent pedidoCriadoEvent);
+    void processarPagamento(PedidoCriadoEvent pedidoCriadoEvent, String correlationId);
     void confirmarPagamento(Long pedidoId, PagamentoStatus status);
 }

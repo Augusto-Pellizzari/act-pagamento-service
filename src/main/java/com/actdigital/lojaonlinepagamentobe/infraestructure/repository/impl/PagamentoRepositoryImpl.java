@@ -20,16 +20,30 @@ public class PagamentoRepositoryImpl implements PagamentoRepository {
         this.jdbc = jdbc;
     }
 
+    private Pagamento map(ResultSet rs, int row) throws java.sql.SQLException {
+        Pagamento pagamento = new Pagamento();
+        pagamento.setId(rs.getLong("id"));
+        pagamento.setPedidoId(rs.getLong("pedido_id"));
+        pagamento.setStatus(PagamentoStatus.valueOf(rs.getString("status")));
+        pagamento.setCriadoEm(rs.getObject("criado_em", OffsetDateTime.class));
+        pagamento.setConfirmadoEm(rs.getObject("confirmado_em", OffsetDateTime.class));
+        pagamento.setCorrelationId(rs.getString("correlation_id"));
+        return pagamento;
+    }
+
     @Override
     public Pagamento salvar(Pagamento p) {
         var sql = """
-            INSERT INTO pagamentos (pedido_id, status, criado_em)
-            VALUES (:pedidoId, :status, :criadoEm)
+          INSERT INTO pagamentos
+            (pedido_id, status, criado_em, correlation_id)
+          VALUES
+            (:pedidoId, :status, :criadoEm, :corrId)
         """;
         var params = new MapSqlParameterSource(Map.of(
                 "pedidoId", p.getPedidoId(),
-                "status", p.getStatus().name(),
-                "criadoEm", p.getCriadoEm()
+                "status",    p.getStatus().name(),
+                "criadoEm",  p.getCriadoEm(),
+                "corrId",    p.getCorrelationId()
         ));
         var kh = new GeneratedKeyHolder();
         jdbc.update(sql, params, kh, new String[]{"id"});
@@ -37,22 +51,19 @@ public class PagamentoRepositoryImpl implements PagamentoRepository {
         return p;
     }
 
+
     @Override
     public Optional<Pagamento> findByPedidoId(Long pedidoId) {
         var sql = "SELECT * FROM pagamentos WHERE pedido_id = :pedidoId";
-        var list = jdbc.query(
-                sql,
-                Map.of("pedidoId", pedidoId),
-                (ResultSet rs,int i) -> {
-                    var pay = new Pagamento();
-                    pay.setId(rs.getLong("id"));
-                    pay.setPedidoId(rs.getLong("pedido_id"));
-                    pay.setStatus(PagamentoStatus.valueOf(rs.getString("status")));
-                    pay.setCriadoEm(rs.getObject("criado_em", OffsetDateTime.class));
-                    pay.setConfirmadoEm(rs.getObject("confirmado_em", OffsetDateTime.class));
-                    return pay;
-                }
-        );
+        var list = jdbc.query(sql, Map.of("pedidoId", pedidoId), this::map);
+        return list.stream().findFirst();
+    }
+
+
+    @Override
+    public Optional<Pagamento> findByCorrelationId(String correlationId) {
+        var sql = "SELECT * FROM pagamentos WHERE correlation_id = :corrId";
+        var list = jdbc.query(sql, Map.of("corrId", correlationId), this::map);
         return list.stream().findFirst();
     }
 

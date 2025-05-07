@@ -6,6 +6,8 @@ import com.actdigital.lojaonlinepagamentobe.infraestructure.event.PedidoCriadoEv
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -19,7 +21,10 @@ public class PedidoCriadoConsumer {
             queues = RabbitMQConfig.PEDIDO_CRIADO_QUEUE,
             containerFactory = "rabbitListenerContainerFactory"
     )
-    public void onPedidoCriado(PedidoCriadoEvent event) {
-        pagamentoService.processarPagamento(event);
+    public void onPedidoCriado(
+            PedidoCriadoEvent event,
+            @Header(AmqpHeaders.CORRELATION_ID) String correlationId
+    ) {
+        pagamentoService.processarPagamento(event, correlationId);
     }
 }
