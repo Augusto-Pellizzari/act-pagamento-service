@@ -25,18 +25,26 @@ public class PagamentoServiceImpl implements PagamentoService {
     private final PagamentoPublisher publisher;
 
     @Override
-    public void processarPagamento(PedidoCriadoEvent event) {
+    public void processarPagamento(PedidoCriadoEvent event, String correlationId) {
 
-        if (repository.findByPedidoId(event.getId()).isEmpty()) {
-            var p = new Pagamento();
-            p.setPedidoId(event.getId());
-            p.setStatus(PagamentoStatus.PENDENTE);
-            p.setCriadoEm(OffsetDateTime.now());
-            repository.salvar(p);
-            log.debug("Pagamento PENDENTE para pedidoId={}", p.getPedidoId());
-        } else {
-            log.debug("Pagamento já existe para pedidoId={}", event.getId());
+        if (correlationId == null || correlationId.isBlank()) {
+            throw new IllegalArgumentException("correlationId é obrigatório");
         }
+
+        if (repository.findByCorrelationId(correlationId).isPresent()) {
+            log.debug("Evento já processado, corrId={}", correlationId);
+            return;
+        }
+
+        Pagamento p = new Pagamento();
+        p.setPedidoId(event.getId());
+        p.setStatus(PagamentoStatus.PENDENTE);
+        p.setCriadoEm(OffsetDateTime.now());
+        p.setCorrelationId(correlationId);
+        repository.salvar(p);
+
+        log.debug("Pagamento PENDENTE para pedidoId={} corrId={}",
+                event.getId(), correlationId);
     }
 
     @Override

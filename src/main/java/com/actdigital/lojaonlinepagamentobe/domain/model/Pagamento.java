@@ -13,5 +13,6 @@ public class Pagamento {
     private PagamentoStatus status;
     private OffsetDateTime criadoEm;
     private OffsetDateTime confirmadoEm;
+    private String correlationId;
 
 }
