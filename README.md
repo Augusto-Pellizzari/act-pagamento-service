@@ -1,92 +1,172 @@
-# Pagamento Service
+# Pedido Service
 
-Microserviço responsável por processar pagamentos de pedidos, persistir status no PostgreSQL e publicar eventos de confirmação ou recusa no RabbitMQ.
+Microserviço responsável por receber a criação de pedidos, persistir no PostgreSQL e publicar eventos de `PedidoCriado` no RabbitMQ.
 
 ---
 
 ## Tecnologias
 
-- Java 17  
-- Spring Boot 3.4.5  
-- Spring Data JDBC
-- RabbitMQ (`spring-boot-starter-amqp`)  
-- PostgreSQL  
-- Maven  
+* Java 17
+* Spring Boot 3.4.5
+* Spring Data JDBC
+* RabbitMQ (`spring-boot-starter-amqp`)
+* PostgreSQL
+* Swagger / OpenAPI 3.1 (springdoc‑openapi‑starter)
+* Maven
 
 ---
 
-## Pré-requisitos
+## Pré‑requisitos
 
-- JDK 17  
-- Maven  
-- RabbitMQ (p.ex. docker-compose)  
-- PostgreSQL (p.ex. docker-compose)  
+* JDK 17
+* Maven
+* RabbitMQ (p.ex. docker‑compose)
+* PostgreSQL (p.ex. docker‑compose)
 
 ---
 
 ## Como rodar localmente
 
-1. Clone este repositório  
-   git clone https://github.com/Augusto-Pellizzari/act-pagamento-service.git  
-   cd act-pagamento-service
+1. **Clone** este repositório
 
-2. Ajuste as variáveis de ambiente (ou application.yml):
+   ```bash
+   git clone https://github.com/Augusto-Pellizzari/act-pedido-service.git
+   cd act-pedido-service
+   ```
 
-SPRING_DATASOURCE_URL=jdbc:postgresql://<host>:5432/loja  
-SPRING_DATASOURCE_USERNAME=postgres  
-SPRING_DATASOURCE_PASSWORD=123456  
+2. **Ajuste as variáveis de ambiente** (ou `application.yml`):
 
-SPRING_RABBITMQ_HOST=rabbitmq  
-SPRING_RABBITMQ_PORT=5672  
-SPRING_RABBITMQ_USERNAME=guest  
-SPRING_RABBITMQ_PASSWORD=guest
+   ```properties
+   SPRING_DATASOURCE_URL=jdbc:postgresql://<host>:5432/loja
+   SPRING_DATASOURCE_USERNAME=postgres
+   SPRING_DATASOURCE_PASSWORD=123456
 
-3. Gere o JAR via Maven  
+   SPRING_RABBITMQ_HOST=rabbitmq
+   SPRING_RABBITMQ_PORT=5672
+   SPRING_RABBITMQ_USERNAME=guest
+   SPRING_RABBITMQ_PASSWORD=guest
+   ```
+
+3. **Gere o JAR** via Maven
+
+   ```bash
    mvn clean package -DskipTests
+   ```
 
-4. Execute a aplicação  
-   java -jar target/loja-online-pagamento-be-0.0.1-SNAPSHOT.jar
+4. **Execute** a aplicação
 
-5. Ou, use o mesmo Dockerfile do pedido-service, ajustando apenas o nome do JAR na etapa de cópia.
+   ```bash
+   java -jar target/loja-online-pedido-be-0.0.1-SNAPSHOT.jar
+   ```
+
+5. **Ou** crie um contêiner Docker:
+
+   ```dockerfile
+   # Dockerfile (já incluso neste projeto)
+   FROM maven:3.9.4-eclipse-temurin-17 AS builder
+   WORKDIR /build
+   COPY pom.xml .
+   COPY src ./src
+   RUN mvn clean package -DskipTests
+
+   FROM eclipse-temurin:17-jre
+   WORKDIR /app
+   COPY --from=builder /build/target/*-SNAPSHOT.jar app.jar
+   ENTRYPOINT ["java","-jar","app.jar"]
+   ```
+
+---
+
+## Documentação Swagger
+
+Depois de subir o serviço localmente você pode explorar a API pelo Swagger:
+
+| Recurso            | URL default                                                                    |
+| ------------------ | ------------------------------------------------------------------------------ |
+| UI interativa      | [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html) |
+| Especificação JSON | [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)         |
+
+> Dica: caso queira acessar a UI apenas com `/swagger-ui`, defina `springdoc.swagger-ui.path=/swagger-ui` no `application.properties`.
+
+### Importar no Postman / Insomnia
+
+1. Acesse `<host>/v3/api-docs` e salve o JSON.
+2. No Postman clique em **Import → Raw text / File** e escolha o JSON para gerar automaticamente a coleção.
 
 ---
 
 ## Endpoints
 
-### 1. Confirmar pagamento
+### 1. Criar pedido
 
-POST /api/pagamentos/confirmar  
+```
+POST /api/pedidos
 Content-Type: application/json
 
 {
-  "pedidoId": 1,
-  "status": "CONFIRMADO"
+  "cliente": "Nome do Cliente"
 }
+```
 
-**status:** "CONFIRMADO" ou "RECUSADO"  
-**Resposta:** 200 OK (sem body)
+**Resposta 200 OK**
+
+```json
+{
+  "id": 1,
+  "cliente": "Nome do Cliente",
+  "status": "AGUARDANDO_PAGAMENTO",
+  "dataCriacao": "2025-05-07T12:34:56"
+}
+```
+
+### 2. Listar todos
+
+```
+GET /api/pedidos
+```
+
+**Resposta 200 OK**
+
+```json
+[
+  {
+    "id": 1,
+    "cliente": "Nome do Cliente",
+    "status": "AGUARDANDO_PAGAMENTO",
+    "dataCriacao": "2025-05-07T12:34:56"
+  }
+]
+```
+
+### 3. Atualizar status
+
+```
+PUT /api/pedidos/{id}/status?status={StatusPedido}
+```
+
+`StatusPedido` pode ser `AGUARDANDO_PAGAMENTO`, `PAGO`, `RECUSADO`, etc.
+
+**Resposta 200 OK** — pedido atualizado.
 
 ---
 
-## Consumo de eventos
+## Fluxo de mensageria
 
-- Consome PedidoCriadoEvent da fila `pedido.criado.queue`  
-- Gera um registro PENDENTE para o pagamento  
-- Publica PagamentoConfirmadoEvent no exchange `pagamento.confirmado.exchange`
+1. Ao criar um pedido, o serviço publica um **PedidoCriadoEvent** no exchange `pedido.criado.exchange`.
+2. O **pagamento-service** consome esse evento e processa o pagamento.
+3. Após confirmação ou recusa, o pagamento-service publica **PagamentoConfirmadoEvent** no exchange `pagamento.confirmado.exchange`.
+4. Este serviço consome o evento e atualiza o status do pedido.
 
 ---
 
 ## Tratamento de erros
 
-- Valida `correlationId` recebido no cabeçalho AMQP  
-- Gera BusinessException / ServiceException em falhas do broker ou de lógica de pagamento  
-- Handler global (@RestControllerAdvice) padroniza o JSON de erro
+* Lança `BusinessException` para erros de domínio.
+* `@RestControllerAdvice` global transforma exceções em payload JSON padronizado.
 
 ---
 
 ## Observações
 
-Integre com o repositório de orquestração:  
-https://github.com/Augusto-Pellizzari/infrastructure-docker-compose
-
-Use testes de integração com RabbitMQ em memória e PostgreSQL no Docker
+Para testes locais recomendo usar o docker‑compose:
+[https://github.com/Augusto-Pellizzari/infrastructure-docker-compose](https://github.com/Augusto-Pellizzari/infrastructure-docker-compose)

@@ -12,7 +12,7 @@ spring:
     password: ${RABBITMQ_PASS}
 
   datasource:
-    url: jdbc:postgresql://db:5432/loja
+    url: jdbc:postgresql://${DB_URL}:5432/loja
     username: ${DB_USER}
     password: ${DB_PASS}
     driver-class-name: org.postgresql.Driver
